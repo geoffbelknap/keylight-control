@@ -4,20 +4,12 @@ Key Light Controller - Entry point
 Minimal launcher that wires the application and starts the UI.
 """
 
-__version__ = "1.0.0"
-__author__ = "Your Name"
+__version__ = "1.3.1"
 __license__ = "GPL-3.0"
 
 import sys
-import socket
 import asyncio
 import signal
-
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
-
-from utils.single_instance import SingleInstance
-from ui.main_window import KeyLightController
 
 
 def main() -> None:
@@ -25,22 +17,38 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Key Light Controller")
     parser.add_argument("--version", action="version", version=f"Key Light Controller {__version__}")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
-    parser.parse_args()
+    parser.add_argument("--minimized", action="store_true", help="Start in the system tray")
+    parser.add_argument("--startup-command", choices=["toggle", "status"], help=argparse.SUPPRESS)
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--toggle", action="store_true", help="Toggle all lights, starting the controller if needed")
+    actions.add_argument("--status", action="store_true", help="Print discovered lights as JSON")
+    args = parser.parse_args()
+    if args.toggle or args.status:
+        from cli import main as cli_main
+        sys.exit(cli_main(status=args.status))
+
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QIcon
+    from utils.single_instance import SingleInstance
+    from ui.main_window import KeyLightController
+    from utils.system_tray import make_keylight_icon
 
     # Enforce single instance
     single_instance = SingleInstance()
     if single_instance.is_running():
         print("Key Light Control is already running.")
         try:
-            signal_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            signal_socket.connect(("127.0.0.1", 45654))
-            signal_socket.close()
+            single_instance.activate_existing()
         except Exception:
             pass
         sys.exit(0)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Key Light Control")
+    app.setDesktopFileName("io.github.geoffbelknap.keylight-control")
+    app.setWindowIcon(QIcon.fromTheme("io.github.geoffbelknap.keylight-control", make_keylight_icon()))
+    app.setQuitOnLastWindowClosed(False)
 
     # Integrate asyncio event loop with Qt
     try:
@@ -53,7 +61,7 @@ def main() -> None:
         asyncio.set_event_loop(loop)
 
     controller = KeyLightController()
-    if not controller.prefs.get("general.launch_minimized", False):
+    if not args.minimized and not controller.prefs.get("general.launch_minimized", False):
         controller.show()
 
     # Graceful signal handling (SIGINT/SIGTERM) to quit cleanly
@@ -98,11 +106,50 @@ def main() -> None:
     activation_timer.timeout.connect(check_for_activation)
     activation_timer.start(100)
 
+    exit_code = 0
+    if args.startup_command:
+        import json
+        import time
+        startup_deadline = time.monotonic() + 15
+        startup_devices = ()
+        startup_settle_until = time.monotonic() + 1
+        startup_timer = QTimer()
+
+        def run_startup_command():
+            nonlocal exit_code, startup_devices, startup_settle_until
+            from cli import devices_ready
+            state = controller._api.handle_request("lights.list")
+            devices = tuple(device.get("mac", device.get("ip", str(index)))
+                            for index, device in enumerate(state.get("devices", [])))
+            if devices != startup_devices:
+                startup_devices = devices
+                startup_settle_until = time.monotonic() + 1
+            if not devices_ready(state) or time.monotonic() < startup_settle_until:
+                if time.monotonic() < startup_deadline:
+                    return
+                startup_timer.stop()
+                print("No Key Lights found. Check power and network access.", file=sys.stderr)
+                exit_code = 1
+                controller.quit_application()
+                return
+            startup_timer.stop()
+            if args.startup_command == "status":
+                print(json.dumps(state), flush=True)
+                controller.quit_application()
+            else:
+                print(json.dumps(controller._api.handle_request("lights.toggle")), flush=True)
+                # Keep the Qt event loop alive for asynchronous device updates
+                # and subsequent toggles through the local socket API.
+
+        startup_timer.timeout.connect(run_startup_command)
+        startup_timer.start(250)
+
     try:
         with loop:
             loop.run_forever()
     finally:
         single_instance.cleanup()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

@@ -72,4 +72,10 @@ debug/
 # Keylight specific
 keylight-controller
 !src/keylight_controller.py
+!packaging/keylight-controller
 *.sha256
+# Flatpak
+.flatpak-builder/
+build-dir/
+repo/
+*.flatpak

@@ -1,0 +1,62 @@
+{
+  "app-id": "io.github.geoffbelknap.keylight-control",
+  "runtime": "org.kde.Platform",
+  "runtime-version": "6.11",
+  "sdk": "org.kde.Sdk",
+  "base": "io.qt.PySide.BaseApp",
+  "base-version": "6.11",
+  "command": "keylight-controller",
+  "finish-args": [
+    "--share=network",
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=dri",
+    "--talk-name=org.kde.StatusNotifierWatcher"
+  ],
+  "build-options": {
+    "env": {
+      "BASEAPP_REMOVE_WEBENGINE": "1",
+      "BASEAPP_DISABLE_NUMPY": "1"
+    }
+  },
+  "cleanup-commands": [
+    "/app/cleanup-BaseApp.sh"
+  ],
+  "modules": [
+    "python3-modules.json",
+    {
+      "name": "keylight-control",
+      "buildsystem": "simple",
+      "build-commands": [
+        "PYTHONPATH=src python3 -m unittest discover -s tests -v",
+        "QT_QPA_PLATFORM=offscreen PYTHONPATH=src python3 test_local_fixes.py",
+        "QT_QPA_PLATFORM=offscreen PYTHONPATH=src python3 tests/check_startup_lifecycle.py toggle",
+        "QT_QPA_PLATFORM=offscreen PYTHONPATH=src python3 tests/check_startup_lifecycle.py status",
+        "mkdir -p /app/share/keylight-control /app/bin",
+        "cp -r src/. /app/share/keylight-control/",
+        "install -Dm755 packaging/keylight-controller /app/bin/keylight-controller",
+        "install -Dm755 packaging/keylight-toggle /app/bin/keylight-toggle",
+        "install -Dm644 packaging/io.github.geoffbelknap.keylight-control.desktop /app/share/applications/io.github.geoffbelknap.keylight-control.desktop",
+        "install -Dm644 packaging/io.github.geoffbelknap.keylight-control.metainfo.xml /app/share/metainfo/io.github.geoffbelknap.keylight-control.metainfo.xml",
+        "install -Dm644 packaging/io.github.geoffbelknap.keylight-control.svg /app/share/icons/hicolor/scalable/apps/io.github.geoffbelknap.keylight-control.svg",
+        "install -Dm644 LICENSE /app/share/licenses/keylight-control/LICENSE"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "..",
+          "skip": [
+            ".git",
+            ".flatpak-builder",
+            "build-dir",
+            "repo",
+            "dist",
+            ".venv",
+            "*.flatpak"
+          ]
+        }
+      ]
+    }
+  ]
+}
