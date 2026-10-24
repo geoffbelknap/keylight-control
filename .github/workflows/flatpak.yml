@@ -2,13 +2,17 @@ name: Flatpak
 
 on:
   push:
-    branches: [master, flatpak-distribution]
+    branches: [master]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: flatpak-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

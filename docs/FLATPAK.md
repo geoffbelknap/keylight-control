@@ -81,10 +81,11 @@ Before submission:
 
 1. Test the installed package on real lights and supported desktops, and publish
    a stable source tag and release. Confirm all included material is licensed.
-2. Replace the app module's local `dir` source with the public repository URL and
-   an immutable release commit. Keep Python modules as pinned, hashed downloads.
-   Paths in the submitted manifest must refer to the source archive or files
-   included with the Flathub submission.
+2. Start from `packaging/flathub/io.github.geoffbelknap.keylight-control.json`.
+   This self-contained candidate embeds the Python modules and pins the app's
+   public source commit. Update that pin to the tested stable release commit
+   before submission. The development manifest one directory above uses local
+   sources, so it is appropriate for working on the app rather than submission.
 3. Check the current requirements, metadata, screenshot, app ID ownership, and
    submission policies. This is a fork; disclose the upstream relationship and
    verify whether an existing listing or upstream coordination affects eligibility.
