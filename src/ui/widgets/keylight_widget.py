@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from dataclasses import replace
 from typing import Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -37,7 +38,12 @@ class KeyLightWidget(QFrame):
         self.is_locked = False  # Lock state for sync protection
         self.pending_update = None
         self.last_update_time = 0.0
-        self.update_timer = QTimer()
+        self._revision = 0
+        self._write_requested = False
+        self._dirty_fields = set()
+        self._write_task = None
+        self._refresh_task = None
+        self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.process_pending_update)
         self.update_timer.setInterval(50)  # Process updates every 50ms max
         self.setup_ui()
@@ -108,6 +114,10 @@ class KeyLightWidget(QFrame):
 
         layout.addLayout(header_layout)
 
+        self.connection_label = QLabel("Connecting…")
+        self.connection_label.setObjectName("connectionStatus")
+        layout.addWidget(self.connection_label)
+
         # Brightness
         brightness_layout = QHBoxLayout()
         brightness_icon = QLabel("☀")
@@ -154,19 +164,15 @@ class KeyLightWidget(QFrame):
 
     # ----- Actions -----
     def toggle_power(self) -> None:
-        self.keylight.on = self.power_button.isChecked()
-        self.update_device()
-        self.update_power_button_style()
-        self.power_state_changed.emit()
-
         controller = self._find_controller()
         if controller:
-            controller.propagate_sync_changes(self, "power", self.keylight.on)
+            index = controller.keylight_widgets.index(self)
+            return controller.dispatch_command("lights.toggle", {"id": index}, sync_source=self)
 
     def on_brightness_changed(self, value: int) -> None:
         self.keylight.brightness = value
         self.brightness_label.setText(f"{value}%")
-        self.schedule_update()
+        self.schedule_update({"brightness"})
         self.update_power_button_style()
 
         controller = self._find_controller()
@@ -177,7 +183,7 @@ class KeyLightWidget(QFrame):
     def on_temperature_changed(self, value: int) -> None:
         self.keylight.temperature = value
         self.temp_label.setText(f"{self.to_kelvin(value)}K")
-        self.schedule_update()
+        self.schedule_update({"temperature"})
         self.update_power_button_style()
 
         controller = self._find_controller()
@@ -186,7 +192,15 @@ class KeyLightWidget(QFrame):
             controller.propagate_sync_changes(self, "temperature", value)
 
     # ----- Update Throttling -----
-    def schedule_update(self) -> None:
+    def mark_pending(self, fields):
+        """Protect local input from a read while waiting for the debounce timer."""
+        self._dirty_fields.update(fields if fields is not None else {"on", "brightness", "temperature"})
+        self._revision += 1
+        self.keylight.pending = True
+        self.connection_label.setText("Updating…")
+
+    def schedule_update(self, fields=None) -> None:
+        self.mark_pending(fields)
         self.pending_update = {
             "on": self.keylight.on,
             "brightness": self.keylight.brightness,
@@ -197,7 +211,7 @@ class KeyLightWidget(QFrame):
 
     def process_pending_update(self) -> None:
         if self.pending_update:
-            current_time = time.time()
+            current_time = time.monotonic()
             # Determine min spacing from preferences (ms)
             controller = self._find_controller()
             min_gap_s = 0.1
@@ -242,39 +256,123 @@ class KeyLightWidget(QFrame):
             )
 
     def update_device(self) -> None:
-        asyncio.create_task(self._update_device_async())
+        self._revision += 1
+        self.keylight.pending = True
+        self._write_requested = True
+        self.connection_label.setText("Updating…")
+        if self._write_task is None or self._write_task.done():
+            self._write_task = asyncio.create_task(self._update_device_async())
 
     async def _update_device_async(self) -> None:
         controller = self._find_controller()
-        if controller:
-            try:
-                await controller.service.set_light_state(self.keylight)
-            except Exception:
-                pass
+        if controller is None:
+            return
+        try:
+            while self._write_requested:
+                self._write_requested = False
+                revision = self._revision
+                snapshot = replace(self.keylight)
+                fields = self._dirty_fields or {"on", "brightness", "temperature"}
+                changes = {field: getattr(snapshot, field) for field in fields}
+                self._dirty_fields = set()
+                try:
+                    data = await controller.service.set_light_state(snapshot, changes)
+                    if revision == self._revision:
+                        self.keylight.pending = False
+                        self.apply_device_state(data)
+                except Exception as exc:
+                    if revision == self._revision:
+                        self.keylight.pending = False
+                        self.set_disconnected(str(exc))
+        finally:
+            if self._write_task is asyncio.current_task():
+                self._write_task = None
+
+    async def flush_update(self):
+        """Send the newest queued command and wait for device read-back."""
+        if self.pending_update is not None:
+            self.pending_update = None
+            self.update_timer.stop()
+            self.update_device()
+        if self._write_task is not None:
+            await self._write_task
 
     def update_from_device(self) -> None:
-        asyncio.create_task(self._update_from_device_async())
+        if self._refresh_task is None or self._refresh_task.done():
+            self._refresh_task = asyncio.create_task(self._update_from_device_async())
+
+    async def refresh_state(self):
+        await self.flush_update()
+        self.update_from_device()
+        await self._refresh_task
 
     async def _update_from_device_async(self) -> None:
         controller = self._find_controller()
         if not controller:
             return
+        if self.keylight.pending or (self._write_task and not self._write_task.done()):
+            return
+        revision = self._revision
+        snapshot = replace(self.keylight)
         try:
-            data = await controller.service.fetch_light_state(self.keylight)
-            if data and data.get("lights"):
-                light_data = data["lights"][0]
-                self.keylight.on = bool(light_data.get("on", self.keylight.on))
-                self.keylight.brightness = light_data.get("brightness", self.keylight.brightness)
-                self.keylight.temperature = light_data.get("temperature", self.keylight.temperature)
+            data = await controller.service.fetch_light_state(snapshot)
+            if revision == self._revision:
+                self.apply_device_state(data)
+        except Exception as exc:
+            if revision == self._revision:
+                self.set_disconnected(str(exc))
 
-                self.power_button.setChecked(self.keylight.on)
-                self.brightness_slider.setValue(max(1, self.keylight.brightness))
-                self.temp_slider.setValue(self.keylight.temperature)
-                self.update_power_button_style()
-                self.keylight.state_loaded = True
-                self.power_state_changed.emit()
-        except Exception:
-            pass
+    def apply_device_state(self, data):
+        light = data["lights"][0]
+        self.keylight.on = bool(light["on"])
+        self.keylight.brightness = int(light["brightness"])
+        self.keylight.temperature = int(light["temperature"])
+        # A read must never be interpreted as slider input or cross-light sync.
+        for control, value in ((self.power_button, self.keylight.on),
+                               (self.brightness_slider, max(1, self.keylight.brightness)),
+                               (self.temp_slider, self.keylight.temperature)):
+            previous = control.blockSignals(True)
+            try:
+                if control is self.power_button:
+                    control.setChecked(value)
+                else:
+                    control.setValue(value)
+            finally:
+                control.blockSignals(previous)
+        self.brightness_label.setText(f"{self.keylight.brightness}%")
+        self.temp_label.setText(f"{self.to_kelvin(self.keylight.temperature)}K")
+        self.keylight.state_loaded = True
+        self.keylight.connected = True
+        self.keylight.last_error = ""
+        self.connection_label.setText("Connected")
+        self.connection_label.setToolTip("")
+        self.update_power_button_style()
+        self.power_state_changed.emit()
+
+    def set_disconnected(self, error):
+        self.keylight.connected = False
+        self.keylight.state_loaded = False
+        self.keylight.last_error = error
+        self.connection_label.setText("Offline — retrying…")
+        self.connection_label.setToolTip(error)
+        self.power_state_changed.emit()
+
+    def endpoint_changed(self):
+        self.stop_io()
+        self.set_disconnected("Device address changed; reconnecting")
+        self.update_from_device()
+
+    def stop_io(self):
+        self._revision += 1
+        self.update_timer.stop()
+        self.pending_update = None
+        self._write_requested = False
+        self._dirty_fields.clear()
+        self.keylight.pending = False
+        for task in (self._write_task, self._refresh_task):
+            if task is not None:
+                task.cancel()
+        self._write_task = self._refresh_task = None
 
     # ----- Menus & Locking -----
     def show_device_menu(self) -> None:
@@ -416,6 +514,7 @@ class KeyLightWidget(QFrame):
                 target_widget.brightness_label.setText(f"{source_device.brightness}%")
 
             target_widget.update_power_button_style()
-            target_widget.schedule_update()
+            fields = {"on", "brightness", "temperature"} if sync_type == "all" else {sync_type}
+            target_widget.schedule_update(fields)
 
         controller.update_master_button_style()

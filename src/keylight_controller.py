@@ -10,6 +10,7 @@ __license__ = "GPL-3.0"
 import sys
 import asyncio
 import signal
+import os
 
 
 def main() -> None:
@@ -46,7 +47,7 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setApplicationName("Key Light Control")
-    app.setDesktopFileName("io.github.geoffbelknap.keylight-control")
+    app.setDesktopFileName(os.environ.get("FLATPAK_ID", "keylight-controller"))
     app.setWindowIcon(QIcon.fromTheme("io.github.geoffbelknap.keylight-control", make_keylight_icon()))
     app.setQuitOnLastWindowClosed(False)
 
@@ -96,6 +97,7 @@ def main() -> None:
             single_instance.socket.setblocking(False)
             conn, _addr = single_instance.socket.accept()
             conn.close()
+            controller.refresh_devices()
             controller.show()
             controller.raise_()
             controller.activateWindow()
@@ -124,7 +126,8 @@ def main() -> None:
             if devices != startup_devices:
                 startup_devices = devices
                 startup_settle_until = time.monotonic() + 1
-            if not devices_ready(state) or time.monotonic() < startup_settle_until:
+            ready = bool(devices) if args.startup_command == "status" else devices_ready(state)
+            if not ready or time.monotonic() < startup_settle_until:
                 if time.monotonic() < startup_deadline:
                     return
                 startup_timer.stop()
@@ -133,13 +136,16 @@ def main() -> None:
                 controller.quit_application()
                 return
             startup_timer.stop()
-            if args.startup_command == "status":
-                print(json.dumps(state), flush=True)
-                controller.quit_application()
-            else:
-                print(json.dumps(controller._api.handle_request("lights.toggle")), flush=True)
-                # Keep the Qt event loop alive for asynchronous device updates
-                # and subsequent toggles through the local socket API.
+            async def finish_command():
+                nonlocal exit_code
+                command = "lights.list" if args.startup_command == "status" else "lights.toggle"
+                result = await controller._api.handle_request_async(command)
+                print(json.dumps(result), flush=True)
+                if not result.get("ok"):
+                    exit_code = 1
+                if args.startup_command == "status" or exit_code:
+                    controller.quit_application()
+            asyncio.create_task(finish_command())
 
         startup_timer.timeout.connect(run_startup_command)
         startup_timer.start(250)

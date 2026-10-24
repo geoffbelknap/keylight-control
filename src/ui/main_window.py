@@ -4,6 +4,7 @@ import asyncio
 import logging
 import sys
 import socket
+import time
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -47,6 +48,7 @@ class KeyLightController(QMainWindow):
         self.device_config = DeviceConfig()
         self.discovery = KeyLightDiscovery()
         self.service = KeyLightService()
+        self._discovery_tasks = {}
         self.prefs = PreferencesService(self.device_config)
         self.master_device_widget = None  # Will be created in setup_ui
         self.setup_ui()
@@ -56,6 +58,7 @@ class KeyLightController(QMainWindow):
         # Connect discovery signals
         self.discovery.device_found.connect(self.add_keylight)
         self.discovery.mac_fetch_requested.connect(self.fetch_device_mac)
+        self.discovery.device_removed.connect(self.device_removed)
 
         # Start discovery
         self.discovery.start_discovery()
@@ -72,6 +75,11 @@ class KeyLightController(QMainWindow):
         self._api_unix: UnixSocketTransport | None = None
         self._api_http: HttpTransport | None = None
         self._start_api_transports()
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setInterval(75_000)
+        self.refresh_timer.timeout.connect(self.refresh_devices)
+        self.refresh_timer.start()
+        self._last_discovery_restart = time.monotonic()
 
     def setup_ui(self):
         """Setup the main UI"""
@@ -83,7 +91,7 @@ class KeyLightController(QMainWindow):
         screen = self.screen() or self.windowHandle().screen()
         screen_geometry = screen.geometry() if screen else None
         self.max_height = int(screen_geometry.height() * 0.75) if screen_geometry else 800
-        self.widget_height = 140
+        self.widget_height = 168
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -142,7 +150,7 @@ class KeyLightController(QMainWindow):
         self.master_power_button.setCheckable(True)
         self.master_power_button.setObjectName("masterPowerButton")
         self.master_power_button.setFixedSize(25, 25)
-        self.master_power_button.clicked.connect(self.toggle_all_lights)
+        self.master_power_button.clicked.connect(lambda: self.dispatch_command("lights.toggle"))
         master_layout.addWidget(self.master_power_button)
 
         self.master_device_toggle = QPushButton("M")
@@ -244,14 +252,14 @@ class KeyLightController(QMainWindow):
                         widget.keylight.on = False
                         widget.power_button.setChecked(False)
                         widget.update_power_button_style()
-                        widget.schedule_update()
+                        widget.schedule_update({"on"})
             else:
                 # All are OFF: turn all ON
                 for widget in self.keylight_widgets:
                     widget.keylight.on = True
                     widget.power_button.setChecked(True)
                     widget.update_power_button_style()
-                    widget.schedule_update()
+                    widget.schedule_update({"on"})
         else:  # AnyOff
             if any_off:
                 # Turn any OFF devices ON
@@ -260,14 +268,14 @@ class KeyLightController(QMainWindow):
                         widget.keylight.on = True
                         widget.power_button.setChecked(True)
                         widget.update_power_button_style()
-                        widget.schedule_update()
+                        widget.schedule_update({"on"})
             else:
                 # All are ON: turn all OFF
                 for widget in self.keylight_widgets:
                     widget.keylight.on = False
                     widget.power_button.setChecked(False)
                     widget.update_power_button_style()
-                    widget.schedule_update()
+                    widget.schedule_update({"on"})
 
         self.update_master_button_state()
         self.update_master_button_style()
@@ -401,7 +409,7 @@ class KeyLightController(QMainWindow):
             widget.temp_slider.blockSignals(old)
             widget.temp_label.setText(f"{widget.to_kelvin(reference_temp)}K")
             widget.update_power_button_style()
-            widget.schedule_update()
+            widget.schedule_update({"temperature"})
         self.update_master_button_style()
 
     def sync_brightness_once(self):
@@ -417,7 +425,7 @@ class KeyLightController(QMainWindow):
             widget.brightness_slider.blockSignals(old)
             widget.brightness_label.setText(f"{reference_brightness}%")
             widget.update_power_button_style()
-            widget.schedule_update()
+            widget.schedule_update({"brightness"})
         self.update_master_button_style()
 
     def sync_all_once(self):
@@ -440,7 +448,7 @@ class KeyLightController(QMainWindow):
             widget.temp_slider.blockSignals(t_old)
             widget.temp_label.setText(f"{widget.to_kelvin(reference_device.temperature)}K")
             widget.update_power_button_style()
-            widget.schedule_update()
+            widget.schedule_update({"on", "brightness", "temperature"})
         self.update_master_button_state()
         self.update_master_button_style()
 
@@ -483,7 +491,10 @@ class KeyLightController(QMainWindow):
                     widget.keylight.on = value
                     widget.power_button.setChecked(value)
                 widget.update_power_button_style()
-                self.pending_sync_updates[i] = widget
+                field = "on" if changed_attribute == "power" else changed_attribute
+                widget.mark_pending({field})
+                fields = self.pending_sync_updates.get(i, (widget, set()))[1] | {field}
+                self.pending_sync_updates[i] = (widget, fields)
             elif self.temp_sync_enabled and changed_attribute == "temperature":
                 widget.keylight.temperature = value
                 old = widget.temp_slider.blockSignals(True)
@@ -491,7 +502,10 @@ class KeyLightController(QMainWindow):
                 widget.temp_slider.blockSignals(old)
                 widget.temp_label.setText(f"{widget.to_kelvin(value)}K")
                 widget.update_power_button_style()
-                self.pending_sync_updates[i] = widget
+                field = "on" if changed_attribute == "power" else changed_attribute
+                widget.mark_pending({field})
+                fields = self.pending_sync_updates.get(i, (widget, set()))[1] | {field}
+                self.pending_sync_updates[i] = (widget, fields)
             elif self.brightness_sync_enabled and changed_attribute == "brightness":
                 widget.keylight.brightness = value
                 old = widget.brightness_slider.blockSignals(True)
@@ -499,7 +513,10 @@ class KeyLightController(QMainWindow):
                 widget.brightness_slider.blockSignals(old)
                 widget.brightness_label.setText(f"{value}%")
                 widget.update_power_button_style()
-                self.pending_sync_updates[i] = widget
+                field = "on" if changed_attribute == "power" else changed_attribute
+                widget.mark_pending({field})
+                fields = self.pending_sync_updates.get(i, (widget, set()))[1] | {field}
+                self.pending_sync_updates[i] = (widget, fields)
         if self.pending_sync_updates and not self.sync_timer.isActive():
             self.sync_timer.start()
         self.update_master_button_style()
@@ -508,8 +525,8 @@ class KeyLightController(QMainWindow):
         if not self.pending_sync_updates:
             self.sync_timer.stop()
             return
-        for widget in self.pending_sync_updates.values():
-            widget.schedule_update()
+        for widget, fields in self.pending_sync_updates.values():
+            widget.schedule_update(fields)
         self.pending_sync_updates.clear()
         self.sync_timer.stop()
 
@@ -598,6 +615,8 @@ class KeyLightController(QMainWindow):
             state = any(kl.on for kl in self.keylights)
         self.master_power_button.setChecked(state)
         self.update_master_button_style()
+        if self.master_device_widget is not None:
+            self.master_device_widget.update_from_devices()
 
     def apply_blur_effect(self):
         blur_effect = QGraphicsBlurEffect()
@@ -642,6 +661,11 @@ class KeyLightController(QMainWindow):
             pass
 
     def quit_application(self):
+        self.refresh_timer.stop()
+        for task in self._discovery_tasks.values():
+            task.cancel()
+        for widget in self.keylight_widgets:
+            widget.stop_io()
         self.discovery.stop_discovery()
         self._stop_api_transports()
         from PySide6.QtWidgets import QApplication as _QApp
@@ -652,6 +676,7 @@ class KeyLightController(QMainWindow):
             if self.isVisible():
                 self.hide()
             else:
+                self.refresh_devices()
                 self.show()
                 self.raise_()
                 self.activateWindow()
@@ -856,7 +881,19 @@ class KeyLightController(QMainWindow):
         self._start_api_transports()
 
     def fetch_device_mac(self, device_info):
-        asyncio.create_task(self._fetch_and_add_device(device_info))
+        identity = device_info.get("service_name", device_info["name"])
+        previous = self._discovery_tasks.get(identity)
+        if previous is not None:
+            previous.cancel()
+
+        async def resolve():
+            try:
+                await self._fetch_and_add_device(device_info)
+            finally:
+                if self._discovery_tasks.get(identity) is asyncio.current_task():
+                    self._discovery_tasks.pop(identity, None)
+
+        self._discovery_tasks[identity] = asyncio.create_task(resolve())
 
     async def _fetch_and_add_device(self, device_info):
         mac_address = await self.discovery._get_device_mac_address(
@@ -866,14 +903,37 @@ class KeyLightController(QMainWindow):
         self.discovery.device_found.emit(device_info)
 
     def add_keylight(self, device_info):
-        for kl in self.keylights:
-            if kl.ip == device_info["ip"]:
+        service_name = device_info.get("service_name", "")
+        mac = device_info.get("mac_address", "")
+        existing = next((light for light in self.keylights
+                         if service_name and light.service_name == service_name), None)
+        if existing is None:
+            existing = next((light for light in self.keylights
+                             if mac and not mac.startswith("IP_") and light.mac_address == mac), None)
+        if existing is None:
+            existing = next((light for light in self.keylights if light.ip == device_info["ip"]
+                             and (not light.mac_address or light.mac_address.startswith("IP_")
+                                  or not mac or mac.startswith("IP_"))), None)
+        for kl, widget in zip(self.keylights, self.keylight_widgets):
+            if kl is existing:
+                changed = (kl.ip, kl.port) != (device_info["ip"], device_info.get("port", 9123))
+                kl.ip = device_info["ip"]
+                kl.port = device_info.get("port", 9123)
+                kl.service_name = service_name or kl.service_name
+                if mac and not mac.startswith("IP_"):
+                    kl.mac_address = mac
+                if changed:
+                    logger.info("Updated address for %s to %s:%s", kl.name, kl.ip, kl.port)
+                    widget.endpoint_changed()
+                else:
+                    widget.update_from_device()
                 return
         keylight = KeyLight(
             name=device_info["name"],
             ip=device_info["ip"],
             port=device_info.get("port", 9123),
             mac_address=device_info.get("mac_address", ""),
+            service_name=service_name,
         )
         self.keylights.append(keylight)
         widget = KeyLightWidget(keylight, self)
@@ -908,6 +968,33 @@ class KeyLightController(QMainWindow):
             widget.setVisible(False)
         self.adjust_window_size()
         self.update_master_button_state()
+
+    def refresh_devices(self):
+        for widget in self.keylight_widgets:
+            widget.update_from_device()
+        if (any(not light.connected for light in self.keylights)
+                and self.prefs.get("features.enable_discovery", True)
+                and time.monotonic() - self._last_discovery_restart >= 75):
+            self._last_discovery_restart = time.monotonic()
+            self.discovery.restart_discovery()
+
+    def device_removed(self, service_name):
+        task = self._discovery_tasks.pop(service_name, None)
+        if task is not None:
+            task.cancel()
+        for widget in self.keylight_widgets:
+            if widget.keylight.service_name == service_name:
+                widget.set_disconnected("Light is no longer advertised on the network")
+
+    def dispatch_command(self, command, params=None, sync_source=None):
+        async def dispatch():
+            result = await self._api.handle_request_async(command, params)
+            if not result.get("ok"):
+                logger.warning("Light command failed: %s", result.get("error"))
+            elif sync_source is not None:
+                self.propagate_sync_changes(sync_source, "power", sync_source.keylight.on)
+            return result
+        return asyncio.create_task(dispatch())
 
     def adjust_window_size(self):
         master_panel_height = 60

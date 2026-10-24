@@ -90,13 +90,19 @@ def create_tray_icon(window) -> QSystemTrayIcon:
     tray = QSystemTrayIcon(icon, window)
     tray.setToolTip("Key Light Control")
 
+    def send_command(command, params):
+        if hasattr(window, "dispatch_command"):
+            window.dispatch_command(command, params)
+        else:
+            window._api.handle_request(command, params)
+
     menu = QMenu(window)
     toggle_action = menu.addAction("Toggle all lights")
-    toggle_action.triggered.connect(lambda: window._api.handle_request("lights.toggle", {}))
+    toggle_action.triggered.connect(lambda: send_command("lights.toggle", {}))
 
     def set_all(on):
         for index in range(len(window.keylights)):
-            window._api.handle_request("lights.set", {"id": index, "on": on})
+            send_command("lights.set", {"id": index, "on": on})
 
     on_action = menu.addAction("All lights on", lambda: set_all(True))
     off_action = menu.addAction("All lights off", lambda: set_all(False))
@@ -106,6 +112,8 @@ def create_tray_icon(window) -> QSystemTrayIcon:
     show_action = menu.addAction("Show controls")
 
     def show_controls():
+        if hasattr(window, "refresh_devices"):
+            window.refresh_devices()
         window.show()
         window.raise_()
         window.activateWindow()
@@ -125,16 +133,16 @@ def create_tray_icon(window) -> QSystemTrayIcon:
                 power = sub.addAction("On")
                 power.setCheckable(True)
                 power.triggered.connect(
-                    lambda checked, i=index: window._api.handle_request("lights.set", {"id": i, "on": checked})
+                    lambda checked, i=index: send_command("lights.set", {"id": i, "on": checked})
                 )
                 brightness = sub.addMenu("Brightness")
                 for percent in (10, 25, 50, 75, 100):
                     brightness.addAction(f"{percent}%",
-                        lambda checked=False, i=index, value=percent: window._api.handle_request("lights.set", {"id": i, "brightness": value}))
+                        lambda checked=False, i=index, value=percent: send_command("lights.set", {"id": i, "brightness": value}))
                 temperature = sub.addMenu("Color temperature")
                 for kelvin in (2900, 3200, 4000, 5000, 5600, 6500, 7000):
                     temperature.addAction(f"{kelvin} K",
-                        lambda checked=False, i=index, value=kelvin: window._api.handle_request("lights.set", {"id": i, "temperature": round(1000000 / value)}))
+                        lambda checked=False, i=index, value=kelvin: send_command("lights.set", {"id": i, "temperature": round(1000000 / value)}))
                 sub.addSeparator()
                 sub.addAction("Rename…", lambda checked=False, i=index: window.keylight_widgets[i].rename_device(window))
                 entries[index] = (sub, power, brightness, temperature)

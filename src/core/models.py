@@ -12,4 +12,8 @@ class KeyLight:
     brightness: int = 50
     temperature: int = 200  # 143-344 (Elgato units, ~7000K-2900K)
     state_loaded: bool = False
+    connected: bool = False
+    pending: bool = False
+    last_error: str = ""
+    service_name: str = ""
 

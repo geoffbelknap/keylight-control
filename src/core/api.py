@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,6 +14,38 @@ class KeyLightAPI:
 
     def __init__(self, controller: KeyLightController) -> None:
         self._controller = controller
+        self._command_lock = asyncio.Lock()
+
+    async def handle_request_async(self, command, params=None):
+        """Refresh before acting and acknowledge commands after device read-back."""
+        params = params or {}
+        if command not in {"lights.list", "lights.get", "lights.set", "lights.toggle"}:
+            return self.handle_request(command, params)
+        async with self._command_lock:
+            try:
+                if "id" in params or command in {"lights.get", "lights.set"}:
+                    widgets = [self._resolve_device(params)[2]]
+                else:
+                    widgets = list(self._controller.keylight_widgets)
+                await asyncio.gather(*(widget.refresh_state() for widget in widgets))
+                writing = command in {"lights.set", "lights.toggle"}
+                if writing:
+                    offline = [widget.keylight for widget in widgets if not widget.keylight.connected]
+                    if offline:
+                        raise RuntimeError("Cannot reach " + ", ".join(light.name for light in offline))
+                result = self.handle_request(command, params)
+                if writing and result.get("ok"):
+                    await asyncio.gather(*(widget.flush_update() for widget in widgets))
+                    failed = [widget.keylight for widget in widgets if not widget.keylight.connected]
+                    if failed:
+                        raise RuntimeError("Command failed: " + "; ".join(
+                            f"{light.name}: {light.last_error}" for light in failed))
+                    if command == "lights.set" or "id" in params:
+                        return self.handle_request("lights.get", params)
+                    return self.handle_request("lights.list")
+                return result
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
 
     def handle_request(self, command: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Dispatch a command and return a JSON-serializable result."""
@@ -45,7 +78,10 @@ class KeyLightAPI:
             "on": keylight.on,
             "brightness": keylight.brightness,
             "temperature": keylight.temperature,
-            "ready": keylight.state_loaded,
+            "ready": keylight.state_loaded and keylight.connected and not keylight.pending,
+            "connected": keylight.connected,
+            "pending": keylight.pending,
+            "error": keylight.last_error or None,
         }
 
     def _resolve_device(self, params: Dict[str, Any]) -> Tuple[int, KeyLight, KeyLightWidget]:
@@ -116,7 +152,7 @@ class KeyLightAPI:
                 changed = True
 
         if changed:
-            widget.schedule_update()
+            widget.schedule_update(set(params) & {"on", "brightness", "temperature"})
             self._controller.update_master_button_state()
             self._controller.update_master_button_style()
 
@@ -130,7 +166,7 @@ class KeyLightAPI:
             widget.power_button.setChecked(kl.on)
             widget.update_power_button_style()
             widget.power_state_changed.emit()
-            widget.schedule_update()
+            widget.schedule_update({"on"})
             self._controller.update_master_button_state()
             self._controller.update_master_button_style()
             return {"device": self._device_to_dict(kl, idx)}

@@ -68,7 +68,7 @@ class HttpTransport:
         command, extra_params = self._path_to_command(tail, request.method)
         params.update(extra_params)
 
-        result = self._api.handle_request(command, params)
+        result = await self._api.handle_request_async(command, params)
         status = 200 if result.get("ok") else 400
         return web.json_response(result, status=status)
 

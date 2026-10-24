@@ -71,7 +71,7 @@ class UnixSocketTransport:
 
                 command = request.get("command", "")
                 params = request.get("params", {})
-                response = self._api.handle_request(command, params)
+                response = await self._api.handle_request_async(command, params)
                 writer.write((json.dumps(response) + "\n").encode("utf-8"))
                 await writer.drain()
         except (asyncio.CancelledError, ConnectionResetError):
