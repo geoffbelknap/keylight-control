@@ -1,168 +1,122 @@
 # Key Light Control
 
-Control Elgato Key Lights from a Linux desktop: power, brightness, color temperature,
-custom names, and quick controls in the system tray. Discover lights automatically
-on your local network using mDNS.
-
-This is a community-maintained fork of
-[sandwichfarm/keylight-control](https://github.com/sandwichfarm/keylight-control),
-with local rename fixes, expanded tray controls, an included toggle command, and
-Flatpak packaging. It is independent of Elgato.
+A Linux desktop app for Elgato Key Lights. Control power, brightness, and color
+temperature, give lights custom names, and make quick adjustments from the system
+tray. Lights are discovered automatically on the local network.
 
 ![Key Light Control](assets/keylight-control-ui.png)
 
-## Your lights stay yours
+## Requirements
 
-This download shares the **application**. Each person installs it on their own
-computer and controls their own Elgato lights on their own local network.
-The package contains the app and its dependencies; device names, discovered
-addresses, and personal preferences are stored locally on each user's computer.
+- Linux on an Intel or AMD 64-bit PC (x86_64).
+- [Flatpak](https://flatpak.org/setup/), which is included with Bazzite.
+- Elgato Key Lights on the same local network as the computer.
 
-## Install on Linux (x86_64)
+No Elgato account is required. Settings and device names are stored locally.
+
+## Install
 
 **[Download the latest Flatpak](https://github.com/geoffbelknap/keylight-control/releases/latest/download/keylight-control.flatpak)**
 · [Release notes and checksums](https://github.com/geoffbelknap/keylight-control/releases/latest)
 
-The download is public and does not require a GitHub account. Bazzite includes
-Flatpak. On another distribution, [install Flatpak](https://flatpak.org/setup/)
-first. This package is for Linux x86_64 (Intel/AMD 64-bit PCs).
-
-1. Download `keylight-control.flatpak` using the link above.
-2. Open a terminal in the folder containing the downloaded file.
-3. Enable Flathub for runtime dependencies, then install:
+Open a terminal in the folder containing `keylight-control.flatpak` and run:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user ./keylight-control.flatpak
 ```
 
-Accept the prompts to install the app and any required runtime dependencies.
-You do not need to install Python or Qt separately on your computer.
+Accept the prompts to install the app and its runtime dependencies. Python and Qt
+are included; they do not need to be installed separately.
 
-4. Launch **Key Light Control** from your application menu, or run:
+Launch **Key Light Control** from the application menu, or run:
 
 ```sh
 flatpak run io.github.geoffbelknap.keylight-control
 ```
 
-Quit any older Key Light controller before launching this version. The app will
-automatically discover **your own lights** on your local network.
+Quit any other Key Light controller before launching the app.
 
-The application itself is **not yet listed on Flathub or in Bazaar search**.
-Adding the Flathub remote above supplies the runtime; the app download comes
-from this repository's GitHub release. After installation, it is managed locally
-as a Flatpak.
+## Use
 
-The computer and lights must share a network that permits mDNS multicast. A firewall
-may need to allow mDNS (UDP 5353). No Elgato account or cloud service is needed.
-Tray menus require a desktop with system tray support. The main window also works
-without a tray. On GNOME, tray integration may require an AppIndicator extension.
+Use each light's power button and sliders to adjust its settings. Open the light's
+menu to rename it. The system tray menu provides individual and all-light controls.
 
-## Toggle from your dock or a keyboard shortcut
+Closing the controls window keeps the app running in the tray. Choose **Quit**
+from the tray menu or press **Ctrl+Q** in the controls window to exit.
 
-Right-click the application launcher and choose **Toggle All Lights** on desktops
-that support desktop actions. For a keyboard shortcut, bind this command in your
-desktop settings:
+Light state refreshes every 75 seconds, when controls are reopened, and before a
+toggle. Each light displays its connection status. If a light goes offline, the
+app checks for it again on the next refresh or interaction.
+
+### Keyboard shortcut
+
+Bind this command in the desktop's keyboard shortcut settings to toggle all lights:
 
 ```sh
 flatpak run io.github.geoffbelknap.keylight-control --toggle
 ```
 
-This starts the controller minimized if necessary, waits up to 15 seconds for
-discovery, and toggles all discovered lights together. The Unix socket API must be
-enabled under Settings → Advanced (it is enabled by default). The program prints
-errors to stderr and returns a nonzero status when no lights are found.
-On its first toggle, the process stays running as the tray controller. Subsequent
-toggle invocations send a command to that instance and return immediately.
+The command starts the app in the tray if it is not already running. Desktops
+that support launcher actions also provide **Toggle All Lights** when
+right-clicking the application launcher.
 
-To inspect device state without changing the lights:
+To print light and connection state as JSON:
 
 ```sh
 flatpak run io.github.geoffbelknap.keylight-control --status
 ```
 
-Light state refreshes in the background every **75 seconds**, and immediately
-when controls are reopened or a toggle is requested. Commands read back the
-light's actual state before reporting success. Each light shows a connection
-status; an offline light is checked again on the next refresh or interaction.
-Failed commands are not replayed automatically after a reconnect.
+### Start at login
 
-Inside the Flatpak, `keylight-toggle` is also included as a command:
+Add the following command to the desktop's startup applications:
 
 ```sh
-flatpak run --command=keylight-toggle io.github.geoffbelknap.keylight-control
+flatpak run io.github.geoffbelknap.keylight-control --minimized
 ```
 
-## Updates, verification, and removal
+## Troubleshooting
 
-For now, updates are manual: download the newest release, quit the app using its
-tray menu or Ctrl+Q in the controls window, and repeat the install command above.
-Your Flatpak settings are preserved. `flatpak update` updates available runtime
-components but does not fetch new app bundles from GitHub Releases.
+- **No lights found:** check that the lights are powered and connected to the same
+  network as the computer. The network must allow mDNS multicast (UDP port 5353).
+  Guest Wi-Fi, VPNs, or firewall rules can prevent discovery.
+- **A light is offline:** check its power and network connection, then reopen the
+  controls to refresh its state. Hover over its connection status for error details.
+- **The toggle shortcut fails:** check that the local API and Unix socket options
+  are enabled under **Settings → Advanced**. Both are enabled by default.
+- **No tray icon:** the desktop must support system tray icons. GNOME may require
+  an AppIndicator extension. Reopen the app from the application menu to show the
+  controls window.
 
-To verify a download, also download `keylight-control.flatpak.sha256` from the
-same release, place it beside the Flatpak, and run:
+## Update
+
+Download the latest Flatpak from the link above, quit the app, and repeat the
+installation command. Preferences and custom light names are preserved.
+
+## Verify a download
+
+Download `keylight-control.flatpak.sha256` from the same release and place it
+beside `keylight-control.flatpak`. In that folder, run:
 
 ```sh
 sha256sum --check keylight-control.flatpak.sha256
 ```
 
-To uninstall the app:
+## Uninstall
 
 ```sh
 flatpak uninstall --user io.github.geoffbelknap.keylight-control
 ```
 
-Preferences are stored in
-`~/.var/app/io.github.geoffbelknap.keylight-control/config/keylight-control/`.
-Source installations use `~/.config/keylight-control/`. If migrating from source,
-quit that installation first and copy the contents of its settings directory to
-the Flatpak settings directory before the first launch. Also update any old
-startup entry or keyboard shortcut to use the Flatpak commands in this README.
+## More documentation
 
-## Run from source
+- [Run from source, migrate settings, and contribute](docs/DEVELOPMENT.md)
+- [Flatpak packaging and distribution](docs/FLATPAK.md)
+- [Local API reference](docs/UPSTREAM-README.md#local-api)
 
-Use Python 3.10 or newer:
+## License and credits
 
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-python src/keylight_controller.py
-python src/keylight_controller.py --toggle
-```
-
-Source and Flatpak installations store separate settings. Quit your old installation
-before migrating so two controllers do not compete to control the same lights.
-No automatic login startup or global shortcut is installed; configure those using
-your desktop's settings if desired.
-
-## Build and distribute
-
-See [Flatpak build and distribution instructions](docs/FLATPAK.md).
-The package uses the KDE runtime and PySide BaseApp, with pinned and hashed Python
-downloads for offline builds. Permissions allow network device discovery/control,
-Wayland/X11 display access, graphics acceleration, and tray integration. It does
-not request access to your home directory or host command execution.
-
-Publishing to Flathub is the route to discovery in Bazaar on Bazzite. A GitHub
-release or a downloadable Flatpak alone does not create a Flathub listing.
-
-## Tests
-
-```sh
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-QT_QPA_PLATFORM=offscreen PYTHONPATH=src python3 test_local_fixes.py
-```
-
-These commands require the application dependencies. The recovery suite uses a
-local mock HTTP server to check failures, reconnects, state refreshes, and command
-ordering. These checks do not change physical lights.
-
-## License and attribution
-
-GPL-3.0-only, following the upstream README and source license declaration. See
-[LICENSE](LICENSE) and [upstream documentation](docs/UPSTREAM-README.md), including
-the local JSON API reference. Original development and Git history are preserved;
-this fork adds packaging and local fixes. Elgato and Key Light are trademarks of
-their respective owners.
+Licensed under [GPL-3.0-only](LICENSE). This community-maintained fork is based on
+[sandwichfarm/keylight-control](https://github.com/sandwichfarm/keylight-control)
+and is independent of Elgato. Elgato and Key Light are trademarks of their
+respective owners.
