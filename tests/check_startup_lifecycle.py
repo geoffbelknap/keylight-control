@@ -16,6 +16,9 @@ timer_fired = []
 
 
 class FakeAPI:
+    async def handle_request_async(self, command):
+        return self.handle_request(command)
+
     def handle_request(self, command):
         calls.append(command)
         return {"ok": True, "devices": [{"on": False}]}

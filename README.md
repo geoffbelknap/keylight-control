@@ -56,6 +56,12 @@ To inspect device state without changing the lights:
 flatpak run io.github.geoffbelknap.keylight-control --status
 ```
 
+Light state refreshes in the background every **75 seconds**, and immediately
+when controls are reopened or a toggle is requested. Commands read back the
+light's actual state before reporting success. Each light shows a connection
+status; an offline light is checked again on the next refresh or interaction.
+Failed commands are not replayed automatically after a reconnect.
+
 Inside the Flatpak, `keylight-toggle` is also included as a command:
 
 ```sh
@@ -97,7 +103,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 QT_QPA_PLATFORM=offscreen PYTHONPATH=src python3 test_local_fixes.py
 ```
 
-The second command requires the GUI dependencies. These checks use mock devices
+These commands require the application dependencies. The recovery suite uses a
+local mock HTTP server to check failures, reconnects, state refreshes, and command
+ordering. These checks use mock devices
 and do not change physical lights.
 
 ## License and attribution

@@ -11,7 +11,7 @@ from utils.paths import control_socket_path
 
 def request(command):
     with socket.socket(socket.AF_UNIX) as sock:
-        sock.settimeout(5)
+        sock.settimeout(12)
         sock.connect(control_socket_path())
         sock.sendall((json.dumps({"command": command}) + "\n").encode())
         with sock.makefile("r") as stream:
@@ -34,13 +34,19 @@ def main(status=False):
             launch += ["--minimized", "--startup-command", "status" if status else "toggle"]
             os.execv(sys.executable, launch)
         deadline = time.monotonic() + 15
-        while not devices_ready(state) and time.monotonic() < deadline:
+        def available():
+            return bool(state.get("devices")) if status else devices_ready(state)
+
+        while not available() and time.monotonic() < deadline:
             time.sleep(0.25)
             try:
                 state = request("lights.list")
             except (FileNotFoundError, ConnectionRefusedError):
                 continue
-        if not devices_ready(state):
+        if not available():
+            if state.get("devices"):
+                unreachable = [device["name"] for device in state["devices"] if not device.get("ready", True)]
+                raise RuntimeError("Cannot reach all Key Lights: " + ", ".join(unreachable))
             raise RuntimeError(
                 "No Key Lights found. Check power, network access, and that the "
                 "controller's Unix socket API is enabled in Settings > Advanced."

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import logging
 from typing import Dict
 
 try:
@@ -10,6 +12,8 @@ except ImportError:  # pragma: no cover - runtime dependency
 
 from zeroconf import ServiceBrowser, Zeroconf, ServiceStateChange
 from PySide6.QtCore import QObject, Signal
+
+logger = logging.getLogger(__name__)
 
 
 class KeyLightDiscovery(QObject):
@@ -22,14 +26,18 @@ class KeyLightDiscovery(QObject):
 
     device_found = Signal(dict)
     mac_fetch_requested = Signal(dict)
+    device_removed = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
-        self.zeroconf = Zeroconf()
+        self.zeroconf: Zeroconf | None = None
         self.browser: ServiceBrowser | None = None
 
     def start_discovery(self) -> None:
         """Start discovering Key Light devices."""
+        if self.browser is not None:
+            return
+        self.zeroconf = Zeroconf()
         self.browser = ServiceBrowser(
             self.zeroconf,
             "_elg._tcp.local.",
@@ -38,12 +46,17 @@ class KeyLightDiscovery(QObject):
 
     def _on_service_state_change(self, zeroconf, service_type, name, state_change):
         """Handle service discovery events."""
-        if state_change == ServiceStateChange.Added:
+        if state_change == ServiceStateChange.Removed:
+            self.device_removed.emit(name)
+            return
+        if state_change in (ServiceStateChange.Added, ServiceStateChange.Updated):
             info = zeroconf.get_service_info(service_type, name)
             if info and info.addresses:
+                addresses = sorted(info.addresses, key=len)  # Prefer IPv4.
                 device_info: Dict[str, str | int] = {
                     "name": name.replace("._elg._tcp.local.", ""),
-                    "ip": ".".join(map(str, info.addresses[0])),
+                    "service_name": name,
+                    "ip": str(ipaddress.ip_address(addresses[0])),
                     "port": info.port,
                 }
                 # Request MAC address fetch from main thread
@@ -83,8 +96,8 @@ class KeyLightDiscovery(QObject):
         try:
             import subprocess
 
-            result = subprocess.run(
-                ["arp", "-n", ip], capture_output=True, text=True, timeout=2
+            result = await asyncio.to_thread(
+                subprocess.run, ["arp", "-n", ip], capture_output=True, text=True, timeout=2
             )
             if result.returncode == 0:
                 lines = result.stdout.strip().split("\n")
@@ -104,5 +117,14 @@ class KeyLightDiscovery(QObject):
         """Stop discovery and cleanup."""
         if self.browser:
             self.browser.cancel()
-        self.zeroconf.close()
+            self.browser = None
+        if self.zeroconf:
+            self.zeroconf.close()
+            self.zeroconf = None
+
+    def restart_discovery(self) -> None:
+        """Recreate network sockets after a disconnect or interface change."""
+        logger.info("Restarting Key Light discovery")
+        self.stop_discovery()
+        self.start_discovery()
 

@@ -1,3 +1,4 @@
+import asyncio
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -139,17 +140,20 @@ class MasterDeviceWidget(QFrame):
         menu.exec_(QCursor.pos())
 
     def toggle_all_power(self):
-        if not self.controller.keylights:
+        widgets = [widget for widget in self.controller.keylight_widgets
+                   if self.ignore_locks or not getattr(widget, "is_locked", False)]
+        if not widgets:
             return
-        new_state = self.power_button.isChecked()
-        for widget in self.controller.keylight_widgets:
-            if not self.ignore_locks and getattr(widget, "is_locked", False):
-                continue
-            widget.keylight.on = new_state
-            widget.power_button.setChecked(new_state)
-            widget.update_power_button_style()
-            widget.schedule_update()
-        self.update_power_button_style()
+
+        async def toggle():
+            await asyncio.gather(*(widget.refresh_state() for widget in widgets))
+            if any(not widget.keylight.connected for widget in widgets):
+                return
+            new_state = not any(widget.keylight.on for widget in widgets)
+            for widget in widgets:
+                index = self.controller.keylight_widgets.index(widget)
+                await self.controller._api.handle_request_async("lights.set", {"id": index, "on": new_state})
+        return asyncio.create_task(toggle())
 
     def brightness_changed(self, value):
         if not self.controller.keylights:
@@ -164,7 +168,7 @@ class MasterDeviceWidget(QFrame):
             widget.brightness_slider.blockSignals(old)
             widget.brightness_label.setText(f"{value}%")
             widget.update_power_button_style()
-            widget.schedule_update()
+            widget.schedule_update({"brightness"})
 
     def temperature_changed(self, value):
         if not self.controller.keylights:
@@ -180,7 +184,7 @@ class MasterDeviceWidget(QFrame):
             widget.temp_slider.blockSignals(old)
             widget.temp_label.setText(f"{kelvin}K")
             widget.update_power_button_style()
-            widget.schedule_update()
+            widget.schedule_update({"temperature"})
 
     def to_kelvin(self, slider_value):
         return int(2900 + (slider_value - 143) * (7000 - 2900) / (344 - 143))
@@ -190,9 +194,13 @@ class MasterDeviceWidget(QFrame):
             return
         first_device = self.controller.keylights[0]
         self.power_button.setChecked(first_device.on)
+        old = self.brightness_slider.blockSignals(True)
         self.brightness_slider.setValue(first_device.brightness)
+        self.brightness_slider.blockSignals(old)
         self.brightness_label.setText(f"{first_device.brightness}%")
+        old = self.temp_slider.blockSignals(True)
         self.temp_slider.setValue(first_device.temperature)
+        self.temp_slider.blockSignals(old)
         self.temp_label.setText(f"{self.to_kelvin(first_device.temperature)}K")
         self.update_power_button_style()
 

@@ -21,6 +21,14 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(json.loads(output.getvalue()), state)
             request.assert_called_once_with("lights.list")
 
+    def test_status_includes_offline_devices_without_waiting_or_toggling(self):
+        state = {"ok": True, "devices": [{"name": "Offline light", "ready": False, "connected": False}]}
+        with patch.object(cli, "request", return_value=state) as request:
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(cli.main(status=True), 0)
+            self.assertEqual(json.loads(output.getvalue()), state)
+            request.assert_called_once_with("lights.list")
+
     def test_cold_start_replaces_client_with_persistent_controller(self):
         for status, action in [(False, "toggle"), (True, "status")]:
             with self.subTest(action=action):
