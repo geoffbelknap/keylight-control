@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Key Light Control
+Comment=Control Elgato Key Light power, brightness and temperature
+Exec=keylight-controller
+Icon=io.github.geoffbelknap.keylight-control
+Terminal=false
+Categories=Utility;Qt;
+Keywords=Elgato;Lighting;Brightness;Streaming;
+StartupNotify=true
+Actions=Toggle;
+
+[Desktop Action Toggle]
+Name=Toggle All Lights
+Exec=keylight-controller --toggle

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.geoffbelknap.keylight-control</id>
+  <name>Key Light Control</name>
+  <summary>Control Elgato Key Lights on your network</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.geoffbelknap"><name>Key Light Control contributors</name></developer>
+  <description>
+    <p>Adjust your Elgato Key Lights from a Linux desktop. Discover lights automatically on your local network and control power, brightness, and color temperature.</p>
+    <ul>
+      <li>Control individual lights or toggle all lights together</li>
+      <li>Rename lights and save your preferences</li>
+      <li>Use tray menus for quick lighting changes</li>
+      <li>Bind the included toggle command to a desktop keyboard shortcut</li>
+    </ul>
+    <p>This community project is independent of Elgato. Your computer and lights must be on a network that allows multicast DNS discovery.</p>
+  </description>
+  <launchable type="desktop-id">io.github.geoffbelknap.keylight-control.desktop</launchable>
+  <url type="homepage">https://github.com/geoffbelknap/keylight-control</url>
+  <url type="bugtracker">https://github.com/geoffbelknap/keylight-control/issues</url>
+  <url type="vcs-browser">https://github.com/geoffbelknap/keylight-control</url>
+  <screenshots><screenshot type="default">
+    <caption>Discover and adjust Key Lights</caption>
+    <image>https://raw.githubusercontent.com/geoffbelknap/keylight-control/master/assets/keylight-control-ui.png</image>
+  </screenshot></screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="1.3.1" date="2026-10-24"><description><p>Bundle desktop controls, tray actions, and a portable toggle command in a Flatpak.</p></description></release></releases>
+  <supports><control>pointing</control><control>keyboard</control></supports>
+</component>

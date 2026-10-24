@@ -5,6 +5,7 @@ import json
 import os
 import logging
 from typing import Optional, TYPE_CHECKING
+from utils.paths import control_socket_path
 
 if TYPE_CHECKING:
     from .api import KeyLightAPI
@@ -27,10 +28,7 @@ class UnixSocketTransport:
 
     @staticmethod
     def _default_socket_path() -> str:
-        runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
-        if runtime_dir:
-            return os.path.join(runtime_dir, "keylight-control.sock")
-        return "/tmp/keylight-control.sock"
+        return control_socket_path()
 
     async def start(self) -> None:
         # Remove stale socket file

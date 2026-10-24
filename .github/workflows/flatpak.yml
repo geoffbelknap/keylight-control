@@ -1,0 +1,46 @@
+name: Flatpak
+
+on:
+  push:
+    branches: [master, flatpak-distribution]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.9
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@0fadf5d65cdfbdb9c94c7a2f3637c41206cc1a70 # v6
+        with:
+          manifest-path: packaging/io.github.geoffbelknap.keylight-control.json
+          bundle: keylight-control.flatpak
+          artifact-name: keylight-control-x86_64
+      - name: Validate bundle metadata
+        run: |
+          flatpak-builder-lint manifest packaging/io.github.geoffbelknap.keylight-control.json
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: keylight-control-x86_64
+          path: dist
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/keylight-control.flatpak --draft --generate-notes
