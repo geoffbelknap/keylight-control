@@ -47,4 +47,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" dist/keylight-control.flatpak --draft --generate-notes
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; keeping its reviewed assets."
+            exit 0
+          fi
+          (cd dist && sha256sum keylight-control.flatpak > keylight-control.flatpak.sha256)
+          gh release create "$RELEASE_TAG" \
+            dist/keylight-control.flatpak dist/keylight-control.flatpak.sha256 \
+            --verify-tag --draft --generate-notes

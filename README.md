@@ -11,22 +11,47 @@ Flatpak packaging. It is independent of Elgato.
 
 ![Key Light Control](assets/keylight-control-ui.png)
 
-## Install
+## Your lights stay yours
 
-Flatpak packaging is included here. This fork is **not yet published on Flathub**.
-Download a `keylight-control.flatpak` build artifact from a successful GitHub Actions
-run, extract the artifact ZIP, and install the bundle:
+This download shares the **application**. Each person installs it on their own
+computer and controls their own Elgato lights on their own local network.
+The package contains the app and its dependencies; device names, discovered
+addresses, and personal preferences are stored locally on each user's computer.
 
-```sh
-flatpak install --user ./keylight-control.flatpak
-flatpak run io.github.geoffbelknap.keylight-control
-```
+## Install on Linux (x86_64)
 
-You need the Flathub remote for the KDE runtime:
+**[Download the latest Flatpak](https://github.com/geoffbelknap/keylight-control/releases/latest/download/keylight-control.flatpak)**
+· [Release notes and checksums](https://github.com/geoffbelknap/keylight-control/releases/latest)
+
+The download is public and does not require a GitHub account. Bazzite includes
+Flatpak. On another distribution, [install Flatpak](https://flatpak.org/setup/)
+first. This package is for Linux x86_64 (Intel/AMD 64-bit PCs).
+
+1. Download `keylight-control.flatpak` using the link above.
+2. Open a terminal in the folder containing the downloaded file.
+3. Enable Flathub for runtime dependencies, then install:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./keylight-control.flatpak
 ```
+
+Accept the prompts to install the app and any required runtime dependencies.
+You do not need to install Python or Qt separately on your computer.
+
+4. Launch **Key Light Control** from your application menu, or run:
+
+```sh
+flatpak run io.github.geoffbelknap.keylight-control
+```
+
+Quit any older Key Light controller before launching this version. The app will
+automatically discover **your own lights** on your local network.
+
+The application itself is **not yet listed on Flathub or in Bazaar search**.
+Adding the Flathub remote above supplies the runtime; the app download comes
+from this repository's GitHub release. After installation, it is managed locally
+as a Flatpak.
 
 The computer and lights must share a network that permits mDNS multicast. A firewall
 may need to allow mDNS (UDP 5353). No Elgato account or cloud service is needed.
@@ -68,6 +93,33 @@ Inside the Flatpak, `keylight-toggle` is also included as a command:
 flatpak run --command=keylight-toggle io.github.geoffbelknap.keylight-control
 ```
 
+## Updates, verification, and removal
+
+For now, updates are manual: download the newest release, quit the app using its
+tray menu or Ctrl+Q in the controls window, and repeat the install command above.
+Your Flatpak settings are preserved. `flatpak update` updates available runtime
+components but does not fetch new app bundles from GitHub Releases.
+
+To verify a download, also download `keylight-control.flatpak.sha256` from the
+same release, place it beside the Flatpak, and run:
+
+```sh
+sha256sum --check keylight-control.flatpak.sha256
+```
+
+To uninstall the app:
+
+```sh
+flatpak uninstall --user io.github.geoffbelknap.keylight-control
+```
+
+Preferences are stored in
+`~/.var/app/io.github.geoffbelknap.keylight-control/config/keylight-control/`.
+Source installations use `~/.config/keylight-control/`. If migrating from source,
+quit that installation first and copy the contents of its settings directory to
+the Flatpak settings directory before the first launch. Also update any old
+startup entry or keyboard shortcut to use the Flatpak commands in this README.
+
 ## Run from source
 
 Use Python 3.10 or newer:
@@ -105,8 +157,7 @@ QT_QPA_PLATFORM=offscreen PYTHONPATH=src python3 test_local_fixes.py
 
 These commands require the application dependencies. The recovery suite uses a
 local mock HTTP server to check failures, reconnects, state refreshes, and command
-ordering. These checks use mock devices
-and do not change physical lights.
+ordering. These checks do not change physical lights.
 
 ## License and attribution
 

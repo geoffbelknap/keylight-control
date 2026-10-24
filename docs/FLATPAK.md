@@ -67,9 +67,16 @@ path need to use `flatpak run … --toggle` after migration.
 
 ## GitHub releases
 
-The Flatpak workflow builds pull requests and pushes and uploads a downloadable
-bundle. Pushing a `v*` tag additionally creates a **draft** GitHub release with the
-Flatpak attached. Review it and publish it when the package is ready for users.
+Public releases at https://github.com/geoffbelknap/keylight-control/releases
+provide `keylight-control.flatpak` and a SHA-256 checksum. These downloads do not
+require GitHub sign-in. The README's installation instructions use those assets.
+
+The Flatpak workflow also builds pull requests and pushes and uploads a
+downloadable CI artifact; those artifact downloads require GitHub sign-in. Pushing a `v*` tag additionally creates a **draft** GitHub release with the
+Flatpak attached. Before publishing, confirm the draft targets the tested source commit and that
+its attached bundle comes from that commit's successful build. Generate the
+checksum from the exact attached file, update the release notes, and then publish
+the draft. If a draft predates later fixes, replace its assets before publication.
 
 ## Flathub and Bazaar
 
@@ -77,25 +84,23 @@ Bazaar searches configured Flatpak remotes, including Flathub. For normal
 discovery on Bazzite, submit this app to Flathub; GitHub artifacts alone will not
 appear in search.
 
-Before submission:
+The current Flathub requirements prohibit AI-generated or AI-assisted manifests
+and AI agents opening or automating submission PRs. They also require disclosure
+of AI-generated application code, documentation, packaging, and other material.
+Read the current policy before planning a submission:
+https://docs.flathub.org/docs/for-app-authors/requirements#generative-ai-policy
 
-1. Test the installed package on real lights and supported desktops, and publish
-   a stable source tag and release. Confirm all included material is licensed.
-2. Start from `packaging/flathub/io.github.geoffbelknap.keylight-control.json`.
-   This self-contained candidate embeds the Python modules and pins the app's
-   public source commit. Update that pin to the tested stable release commit
-   before submission. The development manifest one directory above uses local
-   sources, so it is appropriate for working on the app rather than submission.
-3. Check the current requirements, metadata, screenshot, app ID ownership, and
-   submission policies. This is a fork; disclose the upstream relationship and
-   verify whether an existing listing or upstream coordination affects eligibility.
-4. Run the Flathub manifest and repository linters and resolve their findings.
-   Local repositories using the original screenshot URL report screenshot
-   mirroring errors. Flathub builds mirror screenshots to their media service;
-   verify those checks with the Flathub build before submission approval.
-5. Prepare a submission on the `new-pr` branch of `flathub/flathub`, following the
-   official submission process. Approval and publication are separate from this
-   repository's CI builds.
+The generated file in `packaging/flathub/` is a local build experiment, **not an
+eligible Flathub submission manifest**. A human maintainer would need to
+independently author the submission manifest, disclose the generated material in
+this project, and handle the submission and review directly.
+
+Before a human-led submission, test the installed release on real lights and
+supported desktops, confirm licensing and app ID ownership, check upstream and
+fork/duplicate eligibility, and run Flathub's build and metadata validation. Local
+repositories can report screenshot-mirroring findings that must be resolved or
+checked in the Flathub build environment. Direct GitHub distribution does not
+require Flathub submission.
 
 References:
 
