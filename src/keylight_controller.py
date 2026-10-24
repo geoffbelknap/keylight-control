@@ -111,12 +111,20 @@ def main() -> None:
         import json
         import time
         startup_deadline = time.monotonic() + 15
+        startup_devices = ()
+        startup_settle_until = time.monotonic() + 1
         startup_timer = QTimer()
 
         def run_startup_command():
-            nonlocal exit_code
+            nonlocal exit_code, startup_devices, startup_settle_until
+            from cli import devices_ready
             state = controller._api.handle_request("lights.list")
-            if not state.get("devices"):
+            devices = tuple(device.get("mac", device.get("ip", str(index)))
+                            for index, device in enumerate(state.get("devices", [])))
+            if devices != startup_devices:
+                startup_devices = devices
+                startup_settle_until = time.monotonic() + 1
+            if not devices_ready(state) or time.monotonic() < startup_settle_until:
                 if time.monotonic() < startup_deadline:
                     return
                 startup_timer.stop()

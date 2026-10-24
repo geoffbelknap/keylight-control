@@ -31,7 +31,7 @@ class FakeController:
             def finish():
                 timer_fired.append(True)
                 self.quit_application()
-            QTimer.singleShot(800, finish)
+            QTimer.singleShot(2500, finish)
 
     def quit_application(self):
         QApplication.instance().quit()

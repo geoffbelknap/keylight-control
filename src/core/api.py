@@ -45,6 +45,7 @@ class KeyLightAPI:
             "on": keylight.on,
             "brightness": keylight.brightness,
             "temperature": keylight.temperature,
+            "ready": keylight.state_loaded,
         }
 
     def _resolve_device(self, params: Dict[str, Any]) -> Tuple[int, KeyLight, KeyLightWidget]:

@@ -34,13 +34,13 @@ def main(status=False):
             launch += ["--minimized", "--startup-command", "status" if status else "toggle"]
             os.execv(sys.executable, launch)
         deadline = time.monotonic() + 15
-        while not state.get("devices") and time.monotonic() < deadline:
+        while not devices_ready(state) and time.monotonic() < deadline:
             time.sleep(0.25)
             try:
                 state = request("lights.list")
             except (FileNotFoundError, ConnectionRefusedError):
                 continue
-        if not state.get("devices"):
+        if not devices_ready(state):
             raise RuntimeError(
                 "No Key Lights found. Check power, network access, and that the "
                 "controller's Unix socket API is enabled in Settings > Advanced."
@@ -50,3 +50,8 @@ def main(status=False):
     except (OSError, ValueError, RuntimeError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
+
+
+def devices_ready(state):
+    devices = state.get("devices", [])
+    return bool(devices) and all(device.get("ready", True) for device in devices)

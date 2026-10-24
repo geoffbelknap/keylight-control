@@ -271,6 +271,7 @@ class KeyLightWidget(QFrame):
                 self.brightness_slider.setValue(max(1, self.keylight.brightness))
                 self.temp_slider.setValue(self.keylight.temperature)
                 self.update_power_button_style()
+                self.keylight.state_loaded = True
                 self.power_state_changed.emit()
         except Exception:
             pass

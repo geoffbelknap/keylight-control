@@ -47,6 +47,17 @@ class ClientTests(unittest.TestCase):
                     self.assertEqual(cli.main(), 1)
             request.assert_called_once_with("lights.list")
 
+    def test_toggle_waits_for_actual_device_state(self):
+        with patch.object(cli, "request", side_effect=[
+            {"ok": True, "devices": [{"ready": False, "on": False}]},
+            {"ok": True, "devices": [{"ready": True, "on": True}]},
+            {"ok": True},
+        ]) as request, patch.object(cli.time, "sleep"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(), 0)
+            self.assertEqual([call.args[0] for call in request.call_args_list],
+                             ["lights.list", "lights.list", "lights.toggle"])
+
 
 class InstanceTests(unittest.TestCase):
     def setUp(self):
