@@ -48,6 +48,32 @@ uv run /path/to/flatpak-pip-generator.py \
 Review the changed versions and hashes and rebuild before committing the result.
 Keep the BaseApp, runtime, and SDK branches aligned when upgrading Qt.
 
+## Weekly compatibility checks
+
+The Flatpak workflow runs every Monday at 08:23 UTC and can also be run manually
+from GitHub Actions. It performs two independent checks:
+
+- Build the current source against upstream dependencies without restoring the
+  build cache, running the manifest's full test suite. Install the resulting
+  bundle and check Qt imports, icon creation, and the Qt/asyncio event loop using
+  the deployed Platform runtime rather than the SDK.
+- Download the latest published release and checksum, verify and install it,
+  update its runtime, and run the same startup check. This catches runtime
+  updates that break an existing release even when a fresh build succeeds.
+
+The startup check uses an offscreen window system and disables network access;
+no real lights are discovered or changed. Ordinary PR, push, and release builds
+also test their installed candidate before the draft-release job can proceed.
+
+A failed published-release check makes the workflow fail, allowing GitHub Actions
+failure notifications to alert maintainers according to their notification
+settings. If the build job passes, its `keylight-control-x86_64` artifact contains
+a rebuilt candidate. Validate and publish it as a new release through the normal
+release process. This check does not automatically publish releases, replace
+reviewed release assets, or install anything on users' computers. Until a new
+bundle is published and installed, an incompatible release remains incompatible.
+Scheduled workflows become active once this change reaches the default branch.
+
 ## Sandbox and configuration
 
 Network access is required for multicast DNS discovery and the lights' HTTP APIs.
