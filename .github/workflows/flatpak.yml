@@ -6,17 +6,21 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Mondays at 08:23 UTC; exercise upstream updates even without code changes.
+    - cron: '23 8 * * 1'
 
 permissions:
   contents: read
 
 concurrency:
-  group: flatpak-${{ github.event.pull_request.number || github.ref }}
+  group: flatpak-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.9
       options: --privileged
@@ -27,9 +31,63 @@ jobs:
           manifest-path: packaging/io.github.geoffbelknap.keylight-control.json
           bundle: keylight-control.flatpak
           artifact-name: keylight-control-x86_64
+          # Periodic/manual checks must rerun the tests with fresh dependencies.
+          cache: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
+      - name: Test installed candidate with the current Platform runtime
+        run: |
+          flatpak install --noninteractive --bundle ./keylight-control.flatpak
+          timeout 60s flatpak run --unshare=network --env=QT_QPA_PLATFORM=offscreen \
+            --command=python3 io.github.geoffbelknap.keylight-control \
+            < tests/check_flatpak_startup.py
       - name: Validate bundle metadata
         run: |
           flatpak-builder-lint manifest packaging/io.github.geoffbelknap.keylight-control.json
+
+  published-compatibility:
+    # Test what users actually download, independently of whether a rebuild works.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.9
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify the latest published bundle
+        run: |
+          mkdir -p published
+          curl --fail --location --retry 3 \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/keylight-control.flatpak" \
+            --output published/keylight-control.flatpak
+          curl --fail --location --retry 3 \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/keylight-control.flatpak.sha256" \
+            --output published/keylight-control.flatpak.sha256
+          (cd published && sha256sum --check keylight-control.flatpak.sha256)
+      - name: Install published app and update its runtime
+        run: |
+          flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --noninteractive --bundle ./published/keylight-control.flatpak
+          runtime=$(flatpak info --show-runtime io.github.geoffbelknap.keylight-control)
+          flatpak update --noninteractive "$runtime"
+          flatpak info io.github.geoffbelknap.keylight-control
+          flatpak info "$runtime"
+      - name: Check published app startup against the current runtime
+        run: |
+          timeout 60s flatpak run --unshare=network --env=QT_QPA_PLATFORM=offscreen \
+            --command=python3 io.github.geoffbelknap.keylight-control \
+            < tests/check_flatpak_startup.py
+      - name: Summarize compatibility failure
+        if: failure()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          The latest published Flatpak could not be downloaded, installed, or started
+          with the current upstream runtime. See the failed step for details.
+
+          If the separate **build** job passes, it provides a freshly rebuilt
+          candidate in `keylight-control-x86_64`. Validate and publish a new release
+          so users can install the compatible bundle. A successful rebuild alone
+          does not repair the already published download.
+          EOF
 
   draft-release:
     if: startsWith(github.ref, 'refs/tags/v')
