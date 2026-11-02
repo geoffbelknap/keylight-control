@@ -4,7 +4,7 @@ Key Light Controller - Entry point
 Minimal launcher that wires the application and starts the UI.
 """
 
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 __license__ = "GPL-3.0"
 
 import sys

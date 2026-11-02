@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-02
+
+### Fixed
+- Rebuild the Flatpak with matching Qt and PySide 6.11.3 libraries so it starts
+  after the KDE runtime update that broke the 1.3.1 bundle.
+
+### Added
+- Check installed candidate bundles for Qt startup compatibility before release.
+- Weekly CI rebuilds and published-release compatibility checks, active once the
+  workflow is merged into the default branch.
+
 ## [1.0.0] - 2025-09-14
 
 ### Added
