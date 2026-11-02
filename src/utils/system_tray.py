@@ -8,7 +8,6 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QPen,
-    QAction,
     QRadialGradient,
     QPainterPath,
 )
@@ -120,6 +119,8 @@ def create_tray_icon(window) -> QSystemTrayIcon:
 
     show_action.triggered.connect(show_controls)
     menu.addAction("Quit", window.quit_application)
+    # Keep menu actions alive: KDE exports them over D-Bus. Update their
+    # labels/state instead of rebuilding the menu while it may be open.
     entries = {}
 
     def refresh():
@@ -155,6 +156,8 @@ def create_tray_icon(window) -> QSystemTrayIcon:
         count_on = sum(light.on for light in window.keylights)
         tray.setToolTip(f"Key Lights: {count_on} of {len(window.keylights)} on")
 
+    # Plasma may use its exported menu without emitting QMenu.aboutToShow.
+    # Refresh cached device state as well; this does not issue network reads.
     timer = QTimer(tray)
     timer.timeout.connect(refresh)
     timer.start(500)

@@ -25,6 +25,9 @@
     <image>https://raw.githubusercontent.com/geoffbelknap/keylight-control/master/assets/keylight-control-ui.png</image>
   </screenshot></screenshots>
   <content_rating type="oars-1.1"/>
-  <releases><release version="1.3.1" date="2026-10-24"><description><p>Bundle desktop controls, tray actions, and a portable toggle command in a Flatpak.</p></description></release></releases>
+  <releases>
+    <release version="1.3.2" date="2026-11-02"><description><p>Rebuild with matching Qt and PySide 6.11.3 libraries to fix startup after runtime updates. Check installed bundles and published releases for compatibility in CI.</p></description></release>
+    <release version="1.3.1" date="2026-10-24"><description><p>Bundle desktop controls, tray actions, and a portable toggle command in a Flatpak.</p></description></release>
+  </releases>
   <supports><control>pointing</control><control>keyboard</control></supports>
 </component>

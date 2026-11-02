@@ -40,7 +40,8 @@ Quit any other Key Light controller before launching the app.
 ## Use
 
 Use each light's power button and sliders to adjust its settings. Open the light's
-menu to rename it. The system tray menu provides individual and all-light controls.
+menu to rename it. The system tray menu provides individual and all-light power
+controls, brightness presets, and color temperature presets using saved light names.
 
 Closing the controls window keeps the app running in the tray. Choose **Quit**
 from the tray menu or press **Ctrl+Q** in the controls window to exit.
