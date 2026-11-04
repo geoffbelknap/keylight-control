@@ -2,6 +2,10 @@
 
 App ID: `io.github.geoffbelknap.keylight-control`.
 
+For the maintained public update source, publication setup, and migration from
+local build origins, see [Update repository](UPDATES.md). Do not use a developer's
+local build repository as the public release update source.
+
 Install the builder and build dependencies (the SDK and BaseApp require disk space):
 
 ```sh

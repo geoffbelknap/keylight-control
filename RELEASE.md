@@ -1,5 +1,11 @@
 # Release Procedures
 
+> This legacy PyInstaller guide predates the current Flatpak release workflow.
+> For current release publication, signing, updates, and user migration, follow
+> [Flatpak packaging](docs/FLATPAK.md#github-releases) and
+> [Update repository rollout](docs/UPDATES.md). The commands below are retained
+> as historical reference and must not be used for current Flatpak releases.
+
 This document outlines the release process for Key Light Controller.
 
 ## Release Types

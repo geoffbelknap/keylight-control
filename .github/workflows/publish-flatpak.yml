@@ -1,0 +1,121 @@
+name: Publish Flatpak repository
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# A release is promoted only when published; PRs and weekly rebuilds cannot deploy.
+concurrency:
+  group: flatpak-pages
+  cancel-in-progress: false
+
+jobs:
+  repository:
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install repository tools
+        run: sudo apt-get update && sudo apt-get install -y flatpak ostree gnupg
+      - name: Test upgrade and origin migration
+        run: bash tests/check_flatpak_updates.sh
+      - name: Download reviewed release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir release-assets
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern keylight-control.flatpak --pattern keylight-control.flatpak.sha256 \
+            --dir release-assets
+          (cd release-assets && sha256sum --check keylight-control.flatpak.sha256)
+      - name: Import release signing key
+        env:
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          test -n "$RELEASE_GPG_PRIVATE_KEY" || {
+            echo 'Configure the FLATPAK_GPG_PRIVATE_KEY secret before publishing.' >&2
+            exit 1
+          }
+          export GNUPGHOME="$RUNNER_TEMP/release-gnupg"
+          mkdir -m700 "$GNUPGHOME"
+          printf '%s' "$RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          fingerprint=$(gpg --with-colons --list-secret-keys | awk -F: '$1 == "fpr" {print $10; exit}')
+          test -n "$fingerprint"
+          expected=$(gpg --with-colons --show-keys packaging/release-signing-key.asc | awk -F: '$1 == "fpr" {print $10; exit}')
+          test "$fingerprint" = "$expected" || {
+            echo 'Signing secret does not match the reviewed public key' >&2
+            exit 1
+          }
+          echo "RELEASE_SIGNING_KEY=$fingerprint" >> "$GITHUB_ENV"
+      - name: Prepare signed repository
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          base_url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo 'Repository releases must use vMAJOR.MINOR.PATCH tags' >&2
+            exit 1
+          }
+          # Reject an out-of-order release event that would roll back the repository.
+          status=$(curl --silent --show-error --location --output previous-release.json \
+            --write-out '%{http_code}' "$base_url/release.json")
+          case "$status" in
+            200) python3 - "$RELEASE_TAG" <<'PY'
+          import json, re, sys
+          def version(tag):
+              match = re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)', tag)
+              if not match:
+                  raise SystemExit('Repository releases must use vMAJOR.MINOR.PATCH tags')
+              return tuple(map(int, match.groups()))
+          previous = json.load(open('previous-release.json'))
+          if version(sys.argv[1]) <= version(previous['tag']):
+              raise SystemExit('Refusing to replace an equal or newer published repository')
+          PY
+              ;;
+            404) ;; # First publication.
+            *) echo "Unable to check deployed version: HTTP $status" >&2; exit 1 ;;
+          esac
+          bash packaging/make-update-repo.sh release-assets/keylight-control.flatpak \
+            public "$base_url" "$RELEASE_SIGNING_KEY"
+          python3 - "$RELEASE_TAG" "$RELEASE_SIGNING_KEY" "$status" <<'PY'
+          import datetime, json, subprocess, sys
+          ref = 'app/io.github.geoffbelknap.keylight-control/x86_64/master'
+          commit = subprocess.check_output(['ostree', '--repo=public/repo', 'rev-parse', ref], text=True).strip()
+          details = subprocess.check_output(['ostree', '--repo=public/repo', 'show', commit], text=True)
+          date = next(line.split(':', 1)[1].strip() for line in details.splitlines() if line.startswith('Date:'))
+          timestamp = int(datetime.datetime.fromisoformat(date).timestamp())
+          if sys.argv[3] == '200':
+              previous = json.load(open('previous-release.json'))
+              if previous['signing_key'] != sys.argv[2]:
+                  raise SystemExit('Signing key changed; perform an explicit trust migration first')
+              if timestamp <= previous['timestamp']:
+                  raise SystemExit('Release commit must be newer than the deployed commit')
+          with open('public/release.json', 'w') as output:
+              json.dump({'tag': sys.argv[1], 'commit': commit, 'timestamp': timestamp,
+                         'signing_key': sys.argv[2]}, output)
+          PY
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Remove private signing material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/release-gnupg"
+
+  deploy:
+    needs: repository
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy signed repository
+        id: deployment
+        uses: actions/deploy-pages@v4
