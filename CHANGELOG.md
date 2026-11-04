@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-11-04
+
+### Fixed
+- Provide a maintained, signed Flatpak update repository instead of relying on
+  development repositories that can contain builds older than the installed app.
+- Document the one-time migration for existing bundle and development installs.
+
+### Added
+- Publish the reviewed release commit to GitHub Pages with signed commits and
+  metadata, rejecting older releases and unexpected signing key changes.
+- Test stale-origin failures, migration, subsequent updates, and fresh bundle
+  origins in isolated Flatpak installations before release.
+
 ## [1.3.2] - 2026-11-02
 
 ### Fixed

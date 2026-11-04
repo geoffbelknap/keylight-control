@@ -113,6 +113,7 @@ flatpak uninstall --user io.github.geoffbelknap.keylight-control
 
 - [Run from source, migrate settings, and contribute](docs/DEVELOPMENT.md)
 - [Flatpak packaging and distribution](docs/FLATPAK.md)
+- [Maintained update repository rollout and migration](docs/UPDATES.md)
 - [Local API reference](docs/UPSTREAM-README.md#local-api)
 
 ## License and credits

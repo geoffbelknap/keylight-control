@@ -18,6 +18,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  update-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install repository tools
+        run: sudo apt-get update && sudo apt-get install -y flatpak ostree gnupg
+      - name: Test upgrade and origin migration
+        run: bash tests/check_flatpak_updates.sh
+
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -91,7 +100,7 @@ jobs:
 
   draft-release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, update-regression]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
