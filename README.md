@@ -16,18 +16,23 @@ No Elgato account is required. Settings and device names are stored locally.
 
 ## Install
 
-**[Download the latest Flatpak](https://github.com/geoffbelknap/keylight-control/releases/latest/download/keylight-control.flatpak)**
-· [Release notes and checksums](https://github.com/geoffbelknap/keylight-control/releases/latest)
+**[Install Key Light Control](https://geoffbelknap.github.io/keylight-control/keylight-control.flatpakref)**
+· [Release notes](https://github.com/geoffbelknap/keylight-control/releases/latest)
 
-Open a terminal in the folder containing `keylight-control.flatpak` and run:
+Open the installation link with your software manager, or run:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./keylight-control.flatpak
+flatpak remote-add --user --if-not-exists keylight-control https://geoffbelknap.github.io/keylight-control/keylight-control.flatpakrepo
+flatpak install --user keylight-control io.github.geoffbelknap.keylight-control//master
 ```
 
 Accept the prompts to install the app and its runtime dependencies. Python and Qt
 are included; they do not need to be installed separately.
+
+If you previously installed a downloaded bundle or a local build, follow the
+[one-time migration](docs/UPDATES.md#migrate-an-existing-installation) to receive
+updates from the maintained repository. Preferences and device names are preserved.
 
 Launch **Key Light Control** from the application menu, or run:
 
@@ -91,17 +96,28 @@ flatpak run io.github.geoffbelknap.keylight-control --minimized
 
 ## Update
 
-Download the latest Flatpak from the link above, quit the app, and repeat the
-installation command. Preferences and custom light names are preserved.
+Use your desktop's software updater, or run:
+
+```sh
+flatpak update --user io.github.geoffbelknap.keylight-control
+```
+
+Updates are verified against the release signing key. Quit and reopen the app
+after an update to use the new version. Preferences and custom light names are
+preserved.
 
 ## Verify a download
 
-Download `keylight-control.flatpak.sha256` from the same release and place it
-beside `keylight-control.flatpak`. In that folder, run:
+For manual installation, [GitHub releases](https://github.com/geoffbelknap/keylight-control/releases/latest)
+also provide `keylight-control.flatpak` and `keylight-control.flatpak.sha256`.
+Download both from the same release, place them together, and run:
 
 ```sh
 sha256sum --check keylight-control.flatpak.sha256
 ```
+
+After installing a manual bundle, use the one-time migration above to ensure
+future updates use the maintained repository.
 
 ## Uninstall
 

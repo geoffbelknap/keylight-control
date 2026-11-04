@@ -21,6 +21,14 @@ flatpak run org.flatpak.Builder --user --force-clean --repo=repo \
   packaging/io.github.geoffbelknap.keylight-control.json
 flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
   repo keylight-control.flatpak io.github.geoffbelknap.keylight-control
+
+# Install development builds separately from your normal release installation.
+# Keep these variables set for subsequent development run/update commands.
+development_root="${XDG_STATE_HOME:-$HOME/.local/state}/keylight-control-development"
+export XDG_DATA_HOME="$development_root/data"
+export XDG_CONFIG_HOME="$development_root/config"
+export XDG_CACHE_HOME="$development_root/cache"
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user ./keylight-control.flatpak
 flatpak run io.github.geoffbelknap.keylight-control
 ```
@@ -99,11 +107,13 @@ path need to use `flatpak run … --toggle` after migration.
 
 Public releases at https://github.com/geoffbelknap/keylight-control/releases
 provide `keylight-control.flatpak` and a SHA-256 checksum. These downloads do not
-require GitHub sign-in. The README's installation instructions use those assets.
+require GitHub sign-in. The README uses the maintained signed repository by
+default, and links these assets for manual installation.
 
 The Flatpak workflow also builds pull requests and pushes and uploads a
 downloadable CI artifact; those artifact downloads require GitHub sign-in. Pushing a `v*` tag additionally creates a **draft** GitHub release with the
-Flatpak attached. Before publishing, confirm the draft targets the tested source commit and that
+Flatpak attached. Publishing a non-prerelease also deploys the signed update
+repository described in [Update repository](UPDATES.md). Before publishing, confirm the draft targets the tested source commit and that
 its attached bundle comes from that commit's successful build. Generate the
 checksum from the exact attached file, update the release notes, and then publish
 the draft. If a draft predates later fixes, replace its assets before publication.

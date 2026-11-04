@@ -3,11 +3,11 @@
 ## Rollout status
 
 The repository publication workflow is in `.github/workflows/publish-flatpak.yml`.
-Hosting and the signing secret are configured. The first release deployment must
-be verified before using the URLs below. Existing GitHub release bundles remain
-available through the README until that verification is complete.
+The signed repository is live on GitHub Pages. Hosting and the signing secret are
+configured, and the installation links below are ready to use. GitHub releases
+also retain the reviewed bundles for manual installation and archival use.
 
-The stable repository URL will be:
+The stable repository URL is:
 `https://geoffbelknap.github.io/keylight-control/repo/`.
 Keep this URL and its signing key stable across releases.
 
@@ -62,7 +62,7 @@ The workflow constructs a complete repository snapshot for each release. Clients
 download the current signed commit; historical repository objects are not required
 for ordinary updates. Reviewed bundles remain in GitHub releases for archival use.
 
-## Install after rollout
+## Install
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -75,7 +75,7 @@ Desktop installation can use
 `https://geoffbelknap.github.io/keylight-control/keylight-control.flatpakref`.
 Subsequent releases arrive through the desktop updater or `flatpak update`.
 
-## Migrate an existing installation after rollout
+## Migrate an existing installation
 
 Quit Key Light Control, add the two remotes above, and run:
 
